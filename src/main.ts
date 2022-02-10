@@ -7,6 +7,7 @@ import {
 } from 'obsidian';
 
 import {
+	EditorState,
 	EditorSelection
 } from '@codemirror/state';
 
@@ -82,9 +83,9 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	onunload() {
-		var uninstallers = this._viewUninstallers.values();
+		var uninstallers = Object.values(this._viewUninstallers);
 		console.debug(`Unregistering ${uninstallers.length} view callbacks`);
-		uninstallers.values().forEach((cb) => cb());
+		uninstallers.forEach((cb) => cb());
 		this._viewUninstallers = {};
 
 		this._globalUninstallers.forEach((cb) => cb());
@@ -128,11 +129,11 @@ export default class RememberFileStatePlugin extends Plugin {
 		// If `openedFile` is null, it's because the last pane was closed
 		// and there is now an empty pane.
 		if (openedFile) {
-			var activeView = this.app.workspace.activeLeaf.view;
+			var activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			this.registerOnUnloadFile(activeView);
 
 			if (!this._suppressNextFileOpen) {
-				await this.restoreFileState(openedFile, activeView);
+				this.restoreFileState(openedFile, activeView);
 			} else {
 				this._suppressNextFileOpen = false;
 			}
@@ -166,7 +167,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		console.debug("Remember file state for:", file.path);
 	}
 
-	private readonly restoreFileState = async (file: TFile, view: View): Promise<void> => {
+	private restoreFileState(file: TFile, view: View) {
 		const existingFile = this.data.rememberedFiles.find(
 			(curFile) => curFile.path === file.path
 		);
@@ -174,7 +175,9 @@ export default class RememberFileStatePlugin extends Plugin {
 			console.debug("Restoring file state for:", file.path);
 			const stateData = existingFile.stateData;
 			view.editor.scrollTo(stateData.scrollInfo.left, stateData.scrollInfo.top);
-			view.editor.cm.state.selection = EditorSelection.fromJSON(stateData.selection);
+			var transaction = view.editor.cm.state.update({
+				selection: EditorSelection.fromJSON(stateData.selection)})
+			view.editor.cm.dispatch(transaction);
 		}
 	}
 
