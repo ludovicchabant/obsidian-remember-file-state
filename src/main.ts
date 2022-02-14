@@ -42,9 +42,14 @@ export default class RememberFileStatePlugin extends Plugin {
 	settings: RememberFileStatePluginSettings;
 	data: RememberFileStatePluginData;
 
+	// Don't restore state on the next file being opened.
 	private _suppressNextFileOpen: boolean = false;
+	// Next unique ID to identify views without keeping references to them.
+	private _nextUniqueViewId: number = 0;
 
+	// Functions to unregister any monkey-patched view hooks on plugin unload.
 	private _viewUninstallers = {};
+	// Functions to unregister any global callbacks on plugin unload.
 	private _globalUninstallers = [];
 
 	async onload() {
@@ -83,11 +88,32 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	onunload() {
-		var uninstallers = Object.values(this._viewUninstallers);
-		console.debug(`Unregistering ${uninstallers.length} view callbacks`);
-		uninstallers.forEach((cb) => cb());
+		// Run view uninstallers on all current views.
+		var numViews: number = 0;
+		this.app.workspace.getLeavesOfType("markdown").forEach(
+			(leaf) => {
+				const filePath = leaf.view.file.path;
+				const viewId = this.getUniqueViewId(leaf.view);
+				if (viewId != undefined) {
+					var uninstaller = this._viewUninstallers[viewId];
+					if (uninstaller) {
+						console.debug(`Uninstalling hooks for view ${viewId}`, filePath);
+						uninstaller(leaf.view);
+						++numViews;
+					} else {
+						console.debug("Found markdown view without an uninstaller!", filePath);
+					}
+					// Clear the ID so we don't get confused if the plugin
+					// is re-enabled later.
+					this.clearUniqueViewId(leaf.view);
+				} else {
+					console.debug("Found markdown view without an ID!", filePath);
+				}
+			});
+		console.debug(`Unregistered ${numViews} view callbacks`);
 		this._viewUninstallers = {};
 
+		// Run global unhooks.
 		this._globalUninstallers.forEach((cb) => cb());
 	}
 
@@ -100,11 +126,14 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	private readonly registerOnUnloadFile = function(view) {
-		if (view in this._viewUninstallers) {
+		var filePath = view.file.path;
+		var viewId = this.getUniqueViewId(view, true);
+		if (viewId in this._viewUninstallers) {
+			console.debug(`View ${viewId} is already registered`, filePath);
 			return;
 		}
 
-		console.debug("Registering view callback");
+		console.debug(`Registering callback on view ${viewId}`, filePath);
 		const _this = this;
 		var uninstall = around(view, {
 			onUnloadFile: function(next) {
@@ -114,12 +143,21 @@ export default class RememberFileStatePlugin extends Plugin {
 				};
 			}
 		});
-		this._viewUninstallers[view] = uninstall;
+		this._viewUninstallers[viewId] = uninstall;
 
 		view.register(() => {
-			console.debug("Unregistering view callback");
-			delete this._viewUninstallers[view];
-			uninstall();
+			// Don't hold a reference to this plugin here because this callback
+			// will outlive it if it gets deactivated. So let's find it, and
+			// do nothing if we don't find it.
+			var plugin = app.plugins.getPlugin("remember-file-state");
+			if (plugin) {
+				console.debug(`Unregistering view ${viewId} callback`, filePath);
+				delete plugin._viewUninstallers[viewId];
+				uninstall();
+			} else {
+				console.debug(
+					"Plugin remember-file-state has been unloaded, ignoring unregister");
+			}
 		});
 	}
 
@@ -167,7 +205,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		console.debug("Remember file state for:", file.path);
 	}
 
-	private restoreFileState(file: TFile, view: View) {
+	private readonly restoreFileState = function(file: TFile, view: View) {
 		const existingFile = this.data.rememberedFiles.find(
 			(curFile) => curFile.path === file.path
 		);
@@ -181,7 +219,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		}
 	}
 
-	private forgetExcessFiles() {
+	private readonly forgetExcessFiles = function() {
 		const keepMax = this.settings.rememberMaxFiles;
 		if (keepMax <= 0) {
 			return;
@@ -192,6 +230,21 @@ export default class RememberFileStatePlugin extends Plugin {
 		if (this.data.rememberedFiles.length > keepMax) {
 			this.data.rememberedFiles.splice(keepMax);
 		}
+	}
+
+	private readonly getUniqueViewId = function(view: View, autocreateId: boolean = false) {
+		if (view.__uniqueId == undefined) {
+			if (!autocreateId) {
+				return -1;
+			}
+			view.__uniqueId = (this._nextUniqueViewId++);
+			return view.__uniqueId;
+		}
+		return view.__uniqueId;
+	}
+
+	private readonly clearUniqueViewId = function(view: View) {
+		delete view["__uniqueId"];
 	}
 
 	private readonly onFileRename = async (
