@@ -168,13 +168,16 @@ export default class RememberFileStatePlugin extends Plugin {
 		// and there is now an empty pane.
 		if (openedFile) {
 			var activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-			this.registerOnUnloadFile(activeView);
+			if (activeView) {
+				this.registerOnUnloadFile(activeView);
 
-			if (!this._suppressNextFileOpen) {
-				this.restoreFileState(openedFile, activeView);
-			} else {
-				this._suppressNextFileOpen = false;
+				if (!this._suppressNextFileOpen) {
+					this.restoreFileState(openedFile, activeView);
+				}
 			}
+			// else: the file isn't handled by a markdown editor.
+
+			this._suppressNextFileOpen = false;
 		}
 	}
 
