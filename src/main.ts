@@ -30,12 +30,12 @@ interface RememberedFileState {
 
 // Interface for all currently remembered file states.
 interface RememberFileStatePluginData {
-	rememberedFiles: RememberedFileState[];
+	rememberedFiles: Object;
 }
 
 // Default empty list of remembered file states.
 const DEFAULT_DATA: RememberFileStatePluginData = {
-	rememberedFiles: []
+	rememberedFiles: {}
 };
 
 export default class RememberFileStatePlugin extends Plugin {
@@ -186,10 +186,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		const stateSelectionJSON = view.editor.cm.state.selection.toJSON();
 		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
 
-		var existingFile = this.data.rememberedFiles.find(
-			curFile => curFile.path == file.path
-		);
-
+		var existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
 			existingFile.lastSavedTime = Date.now();
 			existingFile.stateData = stateData;
@@ -199,7 +196,7 @@ export default class RememberFileStatePlugin extends Plugin {
 				lastSavedTime: Date.now(),
 				stateData: stateData
 			};
-			this.data.rememberedFiles.push(newFileState);
+			this.data.rememberedFiles[file.path] = newFileState;
 
 			// If we need to keep the number remembered files under a maximum,
 			// do it now.
@@ -209,9 +206,7 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	private readonly restoreFileState = function(file: TFile, view: View) {
-		const existingFile = this.data.rememberedFiles.find(
-			(curFile) => curFile.path === file.path
-		);
+		const existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
 			console.debug("Restoring file state for:", file.path);
 			const stateData = existingFile.stateData;
@@ -228,10 +223,18 @@ export default class RememberFileStatePlugin extends Plugin {
 			return;
 		}
 
-		this.data.rememberedFiles.sort((a, b) => a.lastSavedTime < b.lastSavedTime);
+		// Sort newer files first, older files last.
+		var filesData = Object.values(this.data.rememberedFiles);
+		filesData.sort((a, b) => {
+			if (a.lastSavedTime > b.lastSavedTime) return -1; // a before b
+			if (a.lastSavedTime < b.lastSavedTime) return 1;  // b before a
+			return 0;
+		});
 
-		if (this.data.rememberedFiles.length > keepMax) {
-			this.data.rememberedFiles.splice(keepMax);
+		// Remove older files past the limit.
+		for (var i = keepMax; i < filesData.length; ++i) {
+			var fileData = filesData[i];
+			delete this.data.rememberedFiles[fileData.path];
 		}
 	}
 
@@ -254,20 +257,18 @@ export default class RememberFileStatePlugin extends Plugin {
 		file: TAbstractFile,
 		oldPath: string,
 	): Promise<void> => {
-		const existingFile = this.data.rememberedFiles.find(
-			(curFile) => curFile.path === oldPath
-		);
+		const existingFile = this.data.rememberedFiles[oldPath];
 		if (existingFile) {
 			existingFile.path = file.path;
+			delete this.data.rememberedFiles[oldPath];
+			this.data.rememberedFiles[file.path] = existingFile;
 		}
 	};
 
 	private readonly onFileDelete = async (
 		file: TAbstractFile,
 	): Promise<void> => {
-		this.data.rememberedFiles = this.data.rememberedFiles.filter(
-			(curFile) => curFile.path !== file.path
-		);
+		delete this.data.rememberedFiles[file.path];
 	};
 }
 
