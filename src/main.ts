@@ -138,7 +138,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		var uninstall = around(view, {
 			onUnloadFile: function(next) {
 				return async function (unloaded: TFile) {
-					_this.rememberFileState(unloaded, view);
+					_this.rememberFileState(unloaded, this);
 					return await next.call(this, unloaded);
 				};
 			}
