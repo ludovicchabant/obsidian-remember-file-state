@@ -30,7 +30,7 @@ interface RememberedFileState {
 
 // Interface for all currently remembered file states.
 interface RememberFileStatePluginData {
-	rememberedFiles: Object;
+	rememberedFiles: Record<string, RememberedFileState>;
 }
 
 // Default empty list of remembered file states.
