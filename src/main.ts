@@ -183,7 +183,12 @@ export default class RememberFileStatePlugin extends Plugin {
 
 	private readonly rememberFileState = async (file: TFile, view: View): Promise<void> => {
 		const scrollInfo = view.editor.getScrollInfo();
-		const stateSelectionJSON = view.editor.cm.state.selection.toJSON();
+		const stateSelection = view.editor.cm.state.selection;
+		if (stateSelection == undefined) {
+			// Legacy editor is in use, let's ignore
+			return;
+		}
+		const stateSelectionJSON = stateSelection.toJSON();
 		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
 
 		var existingFile = this.data.rememberedFiles[file.path];
