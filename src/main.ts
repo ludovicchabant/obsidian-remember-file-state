@@ -149,14 +149,14 @@ export default class RememberFileStatePlugin extends Plugin {
 			// Don't hold a reference to this plugin here because this callback
 			// will outlive it if it gets deactivated. So let's find it, and
 			// do nothing if we don't find it.
-			var plugin = app.plugins.getPlugin("remember-file-state");
+			var plugin = app.plugins.getPlugin("obsidian-remember-file-state");
 			if (plugin) {
 				console.debug(`Unregistering view ${viewId} callback`, filePath);
 				delete plugin._viewUninstallers[viewId];
 				uninstall();
 			} else {
 				console.debug(
-					"Plugin remember-file-state has been unloaded, ignoring unregister");
+					"Plugin obsidian-remember-file-state has been unloaded, ignoring unregister");
 			}
 		});
 	}
