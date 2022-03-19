@@ -10,10 +10,15 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === 'production');
-const outdir = (process.argv[2] === 'dogfood' ? process.argv[3] : '');
 
-const dirsep = (outdir.slice(-1) == '/' || outdir.slice(-1) == "\\") ? '' : '/';
-const outfile = outdir + dirsep + 'main.js';
+var outdir = (process.argv[2] === 'dogfood' ? process.argv[3] : '');
+if (outdir != '') {
+	if (outdir.slice(-1) != '/' && outdir.slice(-1) != "\\") {
+		outdir += '/';
+	}
+}
+
+const outfile = outdir + 'main.js';
 
 esbuild.build({
 	banner: {
