@@ -1,13 +1,13 @@
 {
 	"name": "obsidian-remember-file-state",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"description": "Plugin for Obsidian that remembers cursor position, selection, scrolling, and more for each file",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"dogfood": "node esbuild.config.mjs dogfood",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"version": "node version-bump.mjs"
 	},
 	"keywords": [],
 	"author": "Ludovic Chabant",
