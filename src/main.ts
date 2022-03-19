@@ -207,7 +207,11 @@ export default class RememberFileStatePlugin extends Plugin {
 				//   opened via clicking a hyperlink)
 				// - The file is already currently open in another pane
 				if (!this._suppressNextFileOpen && !this.isFileMultiplyOpen(openedFile)) {
-					this.restoreFileState(openedFile, activeView);
+					try {
+						this.restoreFileState(openedFile, activeView);
+					} catch (err) {
+						console.error("Couldn't restore file state: ", err);
+					}
 				}
 			}
 			// else: the file isn't handled by a markdown editor.
