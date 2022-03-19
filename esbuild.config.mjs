@@ -10,6 +10,10 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === 'production');
+const outdir = (process.argv[2] === 'dogfood' ? process.argv[3] : '');
+
+const dirsep = (outdir.slice(-1) == '/' || outdir.slice(-1) == "\\") ? '' : '/';
+const outfile = outdir + dirsep + 'main.js';
 
 esbuild.build({
 	banner: {
@@ -18,18 +22,35 @@ esbuild.build({
 	entryPoints: ['src/main.ts'],
 	bundle: true,
 	external: [
-		'obsidian', 
-		'electron', 
-		'@codemirror', 
-		'@codemirror/state', 
-		'@codemirror/view', 
-		...builtins
-	],
+		'obsidian',
+		'electron',
+		'@codemirror/autocomplete',
+		'@codemirror/closebrackets',
+		'@codemirror/collab',
+		'@codemirror/commands',
+		'@codemirror/comment',
+		'@codemirror/fold',
+		'@codemirror/gutter',
+		'@codemirror/highlight',
+		'@codemirror/history',
+		'@codemirror/language',
+		'@codemirror/lint',
+		'@codemirror/matchbrackets',
+		'@codemirror/panel',
+		'@codemirror/rangeset',
+		'@codemirror/rectangular-selection',
+		'@codemirror/search',
+		'@codemirror/state',
+		'@codemirror/stream-parser',
+		'@codemirror/text',
+		'@codemirror/tooltip',
+		'@codemirror/view',
+		...builtins],
 	format: 'cjs',
 	watch: !prod,
 	target: 'es2016',
 	logLevel: "info",
 	sourcemap: prod ? false : 'inline',
 	treeShaking: true,
-	outfile: 'main.js',
+	outfile: outfile,
 }).catch(() => process.exit(1));
