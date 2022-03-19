@@ -202,7 +202,11 @@ export default class RememberFileStatePlugin extends Plugin {
 			if (activeView) {
 				this.registerOnUnloadFile(activeView);
 
-				if (!this._suppressNextFileOpen) {
+				// Don't restore the file state if:
+				// - We are suppressing it explicitly (such as if the file was
+				//   opened via clicking a hyperlink)
+				// - The file is already currently open in another pane
+				if (!this._suppressNextFileOpen && !this.isFileMultiplyOpen(openedFile)) {
 					this.restoreFileState(openedFile, activeView);
 				}
 			}
@@ -254,6 +258,18 @@ export default class RememberFileStatePlugin extends Plugin {
 			
 			cm6editor.cm.dispatch(transaction);
 		}
+	}
+	
+	private readonly isFileMultiplyOpen = function(file: TFile) {
+		var numFound: number = 0;
+		this.app.workspace.getLeavesOfType("markdown").forEach(
+			(leaf: WorkspaceLeaf) => {
+				const filePath = (leaf.view as MarkdownView).file.path;
+				if (filePath == file.path) {
+					++numFound;
+				}
+			});
+		return numFound >= 2;
 	}
 
 	private readonly forgetExcessFiles = function() {
