@@ -1,11 +1,10 @@
 import {
+	App,
 	PluginSettingTab,
 	Setting
 } from 'obsidian';
 
-import {
-	RememberFileStatePlugin
-} from './main'
+import RememberFileStatePlugin from './main';
 
 export interface RememberFileStatePluginSettings {
 	rememberMaxFiles: number;
@@ -34,13 +33,13 @@ export class RememberFileStatePluginSettingTab extends PluginSettingTab {
 			.setName('Remember files')
 			.setDesc('How many files to remember at most')
 			.addText(text => text
-				.setValue(this.plugin.settings.rememberMaxFiles?.toString()))
-				.onChange(async (value) => {
+				.setValue(this.plugin.settings.rememberMaxFiles?.toString())
+				.onChange(async (value: string) => {
 					const intValue = parseInt(value);
 					if (!isNaN(intValue)) {
 						this.plugin.settings.rememberMaxFiles = intValue;
 						await this.plugin.saveSettings();
 					}
-				});
+				}));
 	}
 }
