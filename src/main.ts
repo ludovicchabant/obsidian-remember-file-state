@@ -2,6 +2,7 @@ import {
 	App,
 	Editor,
 	MarkdownView,
+	Modal,
 	OpenViewState,
 	Plugin,
 	TAbstractFile,
@@ -68,6 +69,19 @@ const DEFAULT_DATA: RememberFileStatePluginData = {
 	rememberedFiles: {}
 };
 
+// Simple warning message.
+class WarningModal extends Modal {
+	constructor(app: App, title: string, message: string) {
+		super(app)
+		this.title = title;
+		this.message = message;
+	}
+	onOpen() {
+		this.contentEl.createEl('h2', {text: this.title});
+		this.contentEl.createEl('p', {text: this.message});
+	}
+};
+
 export default class RememberFileStatePlugin extends Plugin {
 	settings: RememberFileStatePluginSettings;
 	data: RememberFileStatePluginData;
@@ -115,6 +129,14 @@ export default class RememberFileStatePlugin extends Plugin {
 		this._globalUninstallers.push(uninstall);
 
 		this.addSettingTab(new RememberFileStatePluginSettingTab(this.app, this));
+
+		if (this.app.vault.getConfig('legacyEditor') !== false) {
+			new WarningModal(
+				this.app,
+				"Legacy Editor Not Supported",
+				"The 'Remember File State' plugin works only with the new editor. Please turn off 'Legacy Editor' in the options."
+			).open();
+		}
 	}
 
 	onunload() {
