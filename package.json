@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-remember-file-state",
-	"version": "1.0.5",
+	"version": "1.0.6",
 	"description": "Plugin for Obsidian that remembers cursor position, selection, scrolling, and more for each file",
 	"main": "main.js",
 	"scripts": {
