@@ -91,6 +91,9 @@ export default class RememberFileStatePlugin extends Plugin {
 	// Next unique ID to identify views without keeping references to them.
 	private _nextUniqueViewId: number = 0;
 
+	// Remember last open file in each view.
+	private _lastOpenFiles: Record<string, string> = {};
+
 	// Functions to unregister any monkey-patched view hooks on plugin unload.
 	private _viewUninstallers: Record<string, Function> = {};
 	// Functions to unregister any global callbacks on plugin unload.
@@ -164,6 +167,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			});
 		console.debug(`Unregistered ${numViews} view callbacks`);
 		this._viewUninstallers = {};
+		this._lastOpenFiles = {};
 
 		// Run global unhooks.
 		this._globalUninstallers.forEach((cb) => cb());
@@ -181,7 +185,6 @@ export default class RememberFileStatePlugin extends Plugin {
 		var filePath = view.file.path;
 		var viewId = this.getUniqueViewId(view as unknown as ViewWithID, true);
 		if (viewId in this._viewUninstallers) {
-			console.debug(`View ${viewId} is already registered`, filePath);
 			return;
 		}
 
@@ -206,6 +209,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			if (plugin) {
 				console.debug(`Unregistering view ${viewId} callback`, filePath);
 				delete plugin._viewUninstallers[viewId];
+				delete plugin._lastOpenFiles[viewId];
 				uninstall();
 			} else {
 				console.debug(
@@ -224,11 +228,24 @@ export default class RememberFileStatePlugin extends Plugin {
 			if (activeView) {
 				this.registerOnUnloadFile(activeView);
 
+				var isRealFileOpen = true;
+				const viewId = this.getUniqueViewId(activeView as ViewWithID);
+				if (viewId != undefined) {
+					const lastOpenFileInView = this._lastOpenFiles[viewId];
+					isRealFileOpen = (lastOpenFileInView != openedFile.path);
+					this._lastOpenFiles[viewId] = openedFile.path;
+				}
+
 				// Don't restore the file state if:
 				// - We are suppressing it explicitly (such as if the file was
-				//   opened via clicking a hyperlink)
+				//     opened via clicking a hyperlink)
 				// - The file is already currently open in another pane
-				if (!this._suppressNextFileOpen && !this.isFileMultiplyOpen(openedFile)) {
+				// - The file was already opened in this pane, and we're just
+				//     returning to it.
+				if (!this._suppressNextFileOpen &&
+					!this.isFileMultiplyOpen(openedFile) &&
+				    isRealFileOpen
+				   ) {
 					try {
 						this.restoreFileState(openedFile, activeView);
 					} catch (err) {
