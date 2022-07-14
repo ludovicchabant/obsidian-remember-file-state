@@ -71,6 +71,9 @@ const DEFAULT_DATA: RememberFileStatePluginData = {
 
 // Simple warning message.
 class WarningModal extends Modal {
+	title: string = "";
+	message: string = "";
+
 	constructor(app: App, title: string, message: string) {
 		super(app)
 		this.title = title;
@@ -133,7 +136,7 @@ export default class RememberFileStatePlugin extends Plugin {
 
 		this.addSettingTab(new RememberFileStatePluginSettingTab(this.app, this));
 
-		if (this.app.vault.getConfig('legacyEditor') !== false) {
+		if ((this.app.vault as any).getConfig('legacyEditor') !== false) {
 			new WarningModal(
 				this.app,
 				"Legacy Editor Not Supported",
@@ -229,7 +232,7 @@ export default class RememberFileStatePlugin extends Plugin {
 				this.registerOnUnloadFile(activeView);
 
 				var isRealFileOpen = true;
-				const viewId = this.getUniqueViewId(activeView as ViewWithID);
+				const viewId = this.getUniqueViewId(activeView as unknown as ViewWithID);
 				if (viewId != undefined) {
 					const lastOpenFileInView = this._lastOpenFiles[viewId];
 					isRealFileOpen = (lastOpenFileInView != openedFile.path);
