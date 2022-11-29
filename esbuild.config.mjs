@@ -12,10 +12,12 @@ if you want to view the source, please visit the github repository of this plugi
 const prod = (process.argv[2] === 'production');
 
 var outdir = (process.argv[2] === 'dogfood' ? process.argv[3] : '');
-if (outdir != '') {
+if (outdir != undefined && outdir != '') {
 	if (outdir.slice(-1) != '/' && outdir.slice(-1) != "\\") {
 		outdir += '/';
 	}
+} else {
+	throw("Please provide an output directory to put the dog food into");
 }
 
 const outfile = outdir + 'main.js';
