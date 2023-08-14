@@ -278,14 +278,15 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	private readonly rememberFileState = async (file: TFile, view: MarkdownView): Promise<void> => {
-		const scrollInfo = view.editor.getScrollInfo();
+		// Save scrolling position (Obsidian API only gives vertical position).
+		const scrollInfo = {top: view.currentMode.getScroll(), left: 0};
+
+		// Save current selection.
+		// If state selection is undefined, we have a legacy editor. Just ignore that part.
 		const cm6editor = view.editor as EditorWithCM6;
 		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
-		if (stateSelection == undefined) {
-			// Legacy editor is in use, let's ignore
-			return;
-		}
-		const stateSelectionJSON = stateSelection.toJSON();
+		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : "";
+
 		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
 
 		var existingFile = this.data.rememberedFiles[file.path];
@@ -312,12 +313,18 @@ export default class RememberFileStatePlugin extends Plugin {
 		if (existingFile) {
 			console.debug("RememberedFileState: restoring state for:", file.path, existingFile.stateData);
 			const stateData = existingFile.stateData;
-			view.editor.scrollTo(stateData.scrollInfo.left, stateData.scrollInfo.top);
-			const cm6editor = view.editor as EditorWithCM6;
-			var transaction = cm6editor.cm.state.update({
-				selection: EditorSelection.fromJSON(stateData.selection)})
-			
-			cm6editor.cm.dispatch(transaction);
+
+			// Restore scrolling position (Obsidian API only allows setting vertical position).
+			view.currentMode.applyScroll(stateData.scrollInfo.top);
+
+			// Restore last known selection, if any.
+			if (stateData.selection != "") {
+				const cm6editor = view.editor as EditorWithCM6;
+				var transaction = cm6editor.cm.state.update({
+					selection: EditorSelection.fromJSON(stateData.selection)})
+				
+				cm6editor.cm.dispatch(transaction);
+			}
 		}
 	}
 	
