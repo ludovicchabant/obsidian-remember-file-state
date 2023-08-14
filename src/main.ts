@@ -103,7 +103,7 @@ export default class RememberFileStatePlugin extends Plugin {
 	private _globalUninstallers: Function[] = [];
 
 	async onload() {
-		console.log("Loading RememberFileState plugin");
+		console.log("RememberFileState: loading plugin");
 
 		await this.loadSettings();
 
@@ -155,20 +155,20 @@ export default class RememberFileStatePlugin extends Plugin {
 				if (viewId != undefined) {
 					var uninstaller = this._viewUninstallers[viewId];
 					if (uninstaller) {
-						console.debug(`Uninstalling hooks for view ${viewId}`, filePath);
+						console.debug(`RememberedFileState: uninstalling hooks for view ${viewId}`, filePath);
 						uninstaller(leaf.view);
 						++numViews;
 					} else {
-						console.debug("Found markdown view without an uninstaller!", filePath);
+						console.debug("RememberedFileState: found markdown view without an uninstaller!", filePath);
 					}
 					// Clear the ID so we don't get confused if the plugin
 					// is re-enabled later.
 					this.clearUniqueViewId(leaf.view as ViewWithID);
 				} else {
-					console.debug("Found markdown view without an ID!", filePath);
+					console.debug("RememberedFileState: found markdown view without an ID!", filePath);
 				}
 			});
-		console.debug(`Unregistered ${numViews} view callbacks`);
+		console.debug(`RememberedFileState: unregistered ${numViews} view callbacks`);
 		this._viewUninstallers = {};
 		this._lastOpenFiles = {};
 
@@ -191,7 +191,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			return;
 		}
 
-		console.debug(`Registering callback on view ${viewId}`, filePath);
+		console.debug(`RememberedFileState: registering callback on view ${viewId}`, filePath);
 		const _this = this;
 		var uninstall = around(view, {
 			onUnloadFile: function(next) {
@@ -210,13 +210,13 @@ export default class RememberFileStatePlugin extends Plugin {
 			// @ts-ignore
 			var plugin: RememberFileStatePlugin = app.plugins.getPlugin("obsidian-remember-file-state");
 			if (plugin) {
-				console.debug(`Unregistering view ${viewId} callback`, filePath);
+				console.debug(`RememberedFileState: unregistering view ${viewId} callback`, filePath);
 				delete plugin._viewUninstallers[viewId];
 				delete plugin._lastOpenFiles[viewId];
 				uninstall();
 			} else {
 				console.debug(
-					"Plugin obsidian-remember-file-state has been unloaded, ignoring unregister");
+					"RememberedFileState: plugin was unloaded, ignoring unregister");
 			}
 		});
 	}
@@ -252,11 +252,26 @@ export default class RememberFileStatePlugin extends Plugin {
 					try {
 						this.restoreFileState(openedFile, activeView);
 					} catch (err) {
-						console.error("Couldn't restore file state: ", err);
+						console.error("RememberedFileState: couldn't restore file state: ", err);
+					}
+				}
+				else {
+					console.debug("RememberedFileState: not restoring file state because:");
+					if (this._suppressNextFileOpen) {
+						console.debug("...we were told to not do it.");
+					} else if (this.isFileMultiplyOpen(openedFile)) {
+						console.debug("...it's open in multiple panes.");
+					} else if (!isRealFileOpen) {
+						console.debug("...that file was already open in this pane.");
+					} else {
+						console.debug("...unknown reason.");
 					}
 				}
 			}
 			// else: the file isn't handled by a markdown editor.
+			else {
+				console.debug("RememberedFileState: not restoring anything, it's not a markdown view");
+			}
 
 			this._suppressNextFileOpen = false;
 		}
@@ -289,13 +304,13 @@ export default class RememberFileStatePlugin extends Plugin {
 			// do it now.
 			this.forgetExcessFiles();
 		}
-		console.debug("Remember file state for:", file.path);
+		console.debug("RememberedFileState: remembered state for:", file.path, stateData);
 	}
 
 	private readonly restoreFileState = function(file: TFile, view: MarkdownView) {
 		const existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
-			console.debug("Restoring file state for:", file.path);
+			console.debug("RememberedFileState: restoring state for:", file.path, existingFile.stateData);
 			const stateData = existingFile.stateData;
 			view.editor.scrollTo(stateData.scrollInfo.left, stateData.scrollInfo.top);
 			const cm6editor = view.editor as EditorWithCM6;
