@@ -300,7 +300,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			};
 			this.data.rememberedFiles[file.path] = newFileState;
 
-			// If we need to keep the number remembered files under a maximum,
+			// If we need to keep the number of remembered files under a maximum,
 			// do it now.
 			this.forgetExcessFiles();
 		}
