@@ -155,20 +155,20 @@ export default class RememberFileStatePlugin extends Plugin {
 				if (viewId != undefined) {
 					var uninstaller = this._viewUninstallers[viewId];
 					if (uninstaller) {
-						console.debug(`RememberedFileState: uninstalling hooks for view ${viewId}`, filePath);
+						console.debug(`RememberFileState: uninstalling hooks for view ${viewId}`, filePath);
 						uninstaller(leaf.view);
 						++numViews;
 					} else {
-						console.debug("RememberedFileState: found markdown view without an uninstaller!", filePath);
+						console.debug("RememberFileState: found markdown view without an uninstaller!", filePath);
 					}
 					// Clear the ID so we don't get confused if the plugin
 					// is re-enabled later.
 					this.clearUniqueViewId(leaf.view as ViewWithID);
 				} else {
-					console.debug("RememberedFileState: found markdown view without an ID!", filePath);
+					console.debug("RememberFileState: found markdown view without an ID!", filePath);
 				}
 			});
-		console.debug(`RememberedFileState: unregistered ${numViews} view callbacks`);
+		console.debug(`RememberFileState: unregistered ${numViews} view callbacks`);
 		this._viewUninstallers = {};
 		this._lastOpenFiles = {};
 
@@ -191,7 +191,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			return;
 		}
 
-		console.debug(`RememberedFileState: registering callback on view ${viewId}`, filePath);
+		console.debug(`RememberFileState: registering callback on view ${viewId}`, filePath);
 		const _this = this;
 		var uninstall = around(view, {
 			onUnloadFile: function(next) {
@@ -210,13 +210,13 @@ export default class RememberFileStatePlugin extends Plugin {
 			// @ts-ignore
 			var plugin: RememberFileStatePlugin = app.plugins.getPlugin("obsidian-remember-file-state");
 			if (plugin) {
-				console.debug(`RememberedFileState: unregistering view ${viewId} callback`, filePath);
+				console.debug(`RememberFileState: unregistering view ${viewId} callback`, filePath);
 				delete plugin._viewUninstallers[viewId];
 				delete plugin._lastOpenFiles[viewId];
 				uninstall();
 			} else {
 				console.debug(
-					"RememberedFileState: plugin was unloaded, ignoring unregister");
+					"RememberFileState: plugin was unloaded, ignoring unregister");
 			}
 		});
 	}
@@ -300,7 +300,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			// do it now.
 			this.forgetExcessFiles();
 		}
-		console.debug("RememberedFileState: remembered state for:", file.path, stateData);
+		console.debug("RememberFileState: remembered state for:", file.path, stateData);
 	}
 
 	private readonly getState = function(view: MarkdownView) {
