@@ -13,13 +13,14 @@ https://github.com/ludovicchabant/obsidian-remember-file-state
 `;
 
 const prod = (process.argv[2] === 'production');
+const dogfood = (process.argv[2] === 'dogfood');
 
-var outdir = (process.argv[2] === 'dogfood' ? process.argv[3] : '');
+var outdir = (dogfood ? process.argv[3] : '');
 if (outdir != undefined && outdir != '') {
 	if (outdir.slice(-1) != '/' && outdir.slice(-1) != "\\") {
 		outdir += '/';
 	}
-} else {
+} else if (dogfood) {
 	throw("Please provide an output directory to put the dog food into");
 }
 
