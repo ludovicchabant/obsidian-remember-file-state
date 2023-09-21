@@ -7,6 +7,7 @@ import {
 	Plugin,
 	TAbstractFile,
 	TFile,
+	Tasks,
 	View,
 	WorkspaceLeaf
 } from 'obsidian';
@@ -69,6 +70,9 @@ const DEFAULT_DATA: RememberFileStatePluginData = {
 	rememberedFiles: {}
 };
 
+// Where to save the states database.
+const STATE_DB_PATH: string = '.obsidian/plugins/obsidian-remember-file-state/states.json';
+
 // Simple warning message.
 class WarningModal extends Modal {
 	title: string = "";
@@ -109,12 +113,14 @@ export default class RememberFileStatePlugin extends Plugin {
 
 		this.data = Object.assign({}, DEFAULT_DATA);
 
+		await this.readStateDatabase(STATE_DB_PATH);
+
 		this.registerEvent(this.app.workspace.on('file-open', this.onFileOpen));
+		this.registerEvent(this.app.workspace.on('quit', this.onAppQuit));
 		this.registerEvent(this.app.vault.on('rename', this.onFileRename));
 		this.registerEvent(this.app.vault.on('delete', this.onFileDelete));
 
-		this.app.workspace.getLeavesOfType("markdown").forEach(
-			(leaf: WorkspaceLeaf) => { this.registerOnUnloadFile(leaf.view as MarkdownView); });
+		this.app.workspace.onLayoutReady(() => { this.onLayoutReady(); });
 
 		const _this = this;
 		var uninstall = around(this.app.workspace, {
@@ -184,6 +190,31 @@ export default class RememberFileStatePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	private readonly onLayoutReady = function() {
+		this.app.workspace.getLeavesOfType("markdown").forEach(
+			(leaf: WorkspaceLeaf) => { 
+				var view = leaf.view as MarkdownView;
+
+				// On startup, assign unique IDs to views and register the
+				// unload callback to remember their state.
+				this.registerOnUnloadFile(view); 
+
+				// Also remember which file is opened in which view.
+				const viewId = this.getUniqueViewId(view as ViewWithID);
+				if (viewId != undefined) {
+					this._lastOpenFiles[viewId] = view.file.path;
+				}
+
+				// Restore state for each opened pane on startup.
+				const existingFile = this.data.rememberedFiles[view.file.path];
+				if (existingFile) {
+					const savedStateData = existingFile.stateData;
+					console.debug("RememberFileState: restoring saved state for:", view.file.path, savedStateData);
+					this.restoreState(savedStateData, view);
+				}
+			});
+	}
+
 	private readonly registerOnUnloadFile = function(view: MarkdownView) {
 		var filePath = view.file.path;
 		var viewId = this.getUniqueViewId(view as unknown as ViewWithID, true);
@@ -196,7 +227,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		var uninstall = around(view, {
 			onUnloadFile: function(next) {
 				return async function (unloaded: TFile) {
-					_this.rememberFileState(unloaded, this);
+					_this.rememberFileState(this, unloaded);
 					return await next.call(this, unloaded);
 				};
 			}
@@ -282,8 +313,12 @@ export default class RememberFileStatePlugin extends Plugin {
 		}
 	}
 
-	private readonly rememberFileState = async (file: TFile, view: MarkdownView): Promise<void> => {
+	private readonly rememberFileState = async (view: MarkdownView, file?: TFile): Promise<void> => {
 		const stateData = this.getState(view);
+
+		if (file === undefined) {
+			file = view.file;
+		}
 		var existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
 			existingFile.lastSavedTime = Date.now();
@@ -341,7 +376,6 @@ export default class RememberFileStatePlugin extends Plugin {
 					curView.file.path == file.path &&
 					this.getUniqueViewId(curView) >= 0  // Skip views that have never been activated.
 				   ) {
-					console.debug(`FFFFOOOOOUNNNNDD!!!!! ${file.path}`, curView, activeView);
 					otherView = curView;
 					return false; // Stop iterating leaves.
 				}
@@ -405,5 +439,37 @@ export default class RememberFileStatePlugin extends Plugin {
 	): Promise<void> => {
 		delete this.data.rememberedFiles[file.path];
 	};
+
+	private readonly onAppQuit = async (tasks: Tasks): Promise<void> => {
+		const _this = this;
+		tasks.addPromise(
+			_this.rememberAllOpenedFileStates()
+			.then(_this.writeStateDatabase(STATE_DB_PATH)));
+	}
+
+	private readonly rememberAllOpenedFileStates = async(): Promise<void> => {
+		this.app.workspace.getLeavesOfType("markdown").forEach(
+			(leaf: WorkspaceLeaf) => { 
+				const view = leaf.view as MarkdownView;
+				this.rememberFileState(view);
+			}
+		);
+	}
+
+	private readonly writeStateDatabase = async(path: string): Promise<void> => {
+		const fs = this.app.vault.adapter;
+		const jsonDb = JSON.stringify(this.data);
+		await fs.write(path, jsonDb);
+	}
+
+	private readonly readStateDatabase = async(path: string): Promise<void> => {
+		const fs = this.app.vault.adapter;
+		if (await fs.exists(path)) {
+			const jsonDb = await fs.read(path);
+			this.data = JSON.parse(jsonDb);
+			const numLoaded = Object.keys(this.data.rememberedFiles).length;
+			console.debug(`RememberFileState: read ${numLoaded} record from state database.`);
+		}
+	}
 }
 
