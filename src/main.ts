@@ -226,69 +226,64 @@ export default class RememberFileStatePlugin extends Plugin {
 	): Promise<void> => {
 		// If `openedFile` is null, it's because the last pane was closed
 		// and there is now an empty pane.
-		if (openedFile) {
-			var activeView: MarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-			if (activeView) {
-				this.registerOnUnloadFile(activeView);
+		if (!openedFile) {
+			return;
+		}
 
-				var isRealFileOpen = true;
-				const viewId = this.getUniqueViewId(activeView as unknown as ViewWithID);
-				if (viewId != undefined) {
-					const lastOpenFileInView = this._lastOpenFiles[viewId];
-					isRealFileOpen = (lastOpenFileInView != openedFile.path);
-					this._lastOpenFiles[viewId] = openedFile.path;
-				}
+		var shouldSuppressThis: bool = this._suppressNextFileOpen;
+		this._suppressNextFileOpen = false;
+		if (shouldSuppressThis) {
+			console.debug("RememberFileState: not restoring file state because of explicit suppression");
+			return;
+		}
 
-				// Don't restore the file state if:
-				// - We are suppressing it explicitly (such as if the file was
-				//     opened via clicking a hyperlink)
-				// - The file is already currently open in another pane
-				// - The file was already opened in this pane, and we're just
-				//     returning to it.
-				if (!this._suppressNextFileOpen &&
-					!this.isFileMultiplyOpen(openedFile) &&
-				    isRealFileOpen
-				   ) {
-					try {
-						this.restoreFileState(openedFile, activeView);
-					} catch (err) {
-						console.error("RememberedFileState: couldn't restore file state: ", err);
-					}
-				}
-				else {
-					console.debug("RememberedFileState: not restoring file state because:");
-					if (this._suppressNextFileOpen) {
-						console.debug("...we were told to not do it.");
-					} else if (this.isFileMultiplyOpen(openedFile)) {
-						console.debug("...it's open in multiple panes.");
-					} else if (!isRealFileOpen) {
-						console.debug("...that file was already open in this pane.");
-					} else {
-						console.debug("...unknown reason.");
-					}
+		// Check that the file is handled by a markdown editor, which is the
+		// only editor we support for now.
+		var activeView: MarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!activeView) {
+			console.debug("RememberFileState: not restoring file state, it's not a markdown view");
+			return;
+		}
+
+		this.registerOnUnloadFile(activeView);
+
+		// Check if this is a genuine file open, and not returning to pane that
+		// already had this file opened in it.
+		var isRealFileOpen = true;
+		const viewId = this.getUniqueViewId(activeView as unknown as ViewWithID);
+		if (viewId != undefined) {
+			const lastOpenFileInView = this._lastOpenFiles[viewId];
+			isRealFileOpen = (lastOpenFileInView != openedFile.path);
+			this._lastOpenFiles[viewId] = openedFile.path;
+		}
+		if (!isRealFileOpen) {
+			console.debug("RememberFileState: not restoring file state, that file was already open in this pane.");
+			return;
+		}
+
+		// Restore the state!
+		try {
+			const existingFile = this.data.rememberedFiles[openedFile.path];
+			if (existingFile) {
+				const savedStateData = existingFile.stateData;
+				console.debug("RememberFileState: restoring saved state for:", openedFile.path, savedStateData);
+				this.restoreState(savedStateData, activeView);
+			} else {
+				// If we don't have any saved state for this file, let's see if
+				// it's opened in another pane. If so, restore that.
+				const otherPaneState = this.findFileStateFromOtherPane(openedFile, activeView);
+				if (otherPaneState) {
+					console.debug("RememberFileState: restoring other pane state for:", openedFile.path, otherPaneState);
+					this.restoreState(otherPaneState, activeView);
 				}
 			}
-			// else: the file isn't handled by a markdown editor.
-			else {
-				console.debug("RememberedFileState: not restoring anything, it's not a markdown view");
-			}
-
-			this._suppressNextFileOpen = false;
+		} catch (err) {
+			console.error("RememberFileState: couldn't restore file state: ", err);
 		}
 	}
 
 	private readonly rememberFileState = async (file: TFile, view: MarkdownView): Promise<void> => {
-		// Save scrolling position (Obsidian API only gives vertical position).
-		const scrollInfo = {top: view.currentMode.getScroll(), left: 0};
-
-		// Save current selection.
-		// If state selection is undefined, we have a legacy editor. Just ignore that part.
-		const cm6editor = view.editor as EditorWithCM6;
-		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
-		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : "";
-
-		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
-
+		const stateData = this.getState(view);
 		var existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
 			existingFile.lastSavedTime = Date.now();
@@ -308,36 +303,53 @@ export default class RememberFileStatePlugin extends Plugin {
 		console.debug("RememberedFileState: remembered state for:", file.path, stateData);
 	}
 
-	private readonly restoreFileState = function(file: TFile, view: MarkdownView) {
-		const existingFile = this.data.rememberedFiles[file.path];
-		if (existingFile) {
-			console.debug("RememberedFileState: restoring state for:", file.path, existingFile.stateData);
-			const stateData = existingFile.stateData;
+	private readonly getState = function(view: MarkdownView) {
+		// Save scrolling position (Obsidian API only gives vertical position).
+		const scrollInfo = {top: view.currentMode.getScroll(), left: 0};
 
-			// Restore scrolling position (Obsidian API only allows setting vertical position).
-			view.currentMode.applyScroll(stateData.scrollInfo.top);
+		// Save current selection.
+		// If state selection is undefined, we have a legacy editor. Just ignore that part.
+		const cm6editor = view.editor as EditorWithCM6;
+		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
+		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : "";
 
-			// Restore last known selection, if any.
-			if (stateData.selection != "") {
-				const cm6editor = view.editor as EditorWithCM6;
-				var transaction = cm6editor.cm.state.update({
-					selection: EditorSelection.fromJSON(stateData.selection)})
-				
-				cm6editor.cm.dispatch(transaction);
-			}
+		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
+
+		return stateData;
+	}
+
+	private readonly restoreState = function(stateData: StateData, view: MarkdownView) {
+		// Restore scrolling position (Obsidian API only allows setting vertical position).
+		view.currentMode.applyScroll(stateData.scrollInfo.top);
+
+		// Restore last known selection, if any.
+		if (stateData.selection != "") {
+			const cm6editor = view.editor as EditorWithCM6;
+			var transaction = cm6editor.cm.state.update({
+				selection: EditorSelection.fromJSON(stateData.selection)})
+			
+			cm6editor.cm.dispatch(transaction);
 		}
 	}
 	
-	private readonly isFileMultiplyOpen = function(file: TFile) {
-		var numFound: number = 0;
-		this.app.workspace.getLeavesOfType("markdown").forEach(
+	private readonly findFileStateFromOtherPane = function(file: TFile, activeView: MarkdownView) {
+		var otherView = null;
+		this.app.workspace.getLeavesOfType("markdown").every(
 			(leaf: WorkspaceLeaf) => {
-				const filePath = (leaf.view as MarkdownView).file.path;
-				if (filePath == file.path) {
-					++numFound;
+				var curView = leaf.view as MarkdownView;
+				if (curView != activeView && 
+					curView.file.path == file.path &&
+					this.getUniqueViewId(curView) >= 0  // Skip views that have never been activated.
+				   ) {
+					console.debug(`FFFFOOOOOUNNNNDD!!!!! ${file.path}`, curView, activeView);
+					otherView = curView;
+					return false; // Stop iterating leaves.
 				}
-			});
-		return numFound >= 2;
+				return true;
+			},
+			this // thisArg
+		);
+		return otherView ? this.getState(otherView) : null;
 	}
 
 	private readonly forgetExcessFiles = function() {
