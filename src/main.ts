@@ -200,7 +200,7 @@ export default class RememberFileStatePlugin extends Plugin {
 				this.registerOnUnloadFile(view); 
 
 				// Also remember which file is opened in which view.
-				const viewId = this.getUniqueViewId(view as ViewWithID);
+				const viewId = this.getUniqueViewId(view as unknown as ViewWithID);
 				if (viewId != undefined) {
 					this._lastOpenFiles[viewId] = view.file.path;
 				}
@@ -261,7 +261,7 @@ export default class RememberFileStatePlugin extends Plugin {
 			return;
 		}
 
-		var shouldSuppressThis: bool = this._suppressNextFileOpen;
+		var shouldSuppressThis: boolean = this._suppressNextFileOpen;
 		this._suppressNextFileOpen = false;
 		if (shouldSuppressThis) {
 			console.debug("RememberFileState: not restoring file state because of explicit suppression");
@@ -342,11 +342,12 @@ export default class RememberFileStatePlugin extends Plugin {
 		// Save scrolling position (Obsidian API only gives vertical position).
 		const scrollInfo = {top: view.currentMode.getScroll(), left: 0};
 
-		// Save current selection.
+		// Save current selection. CodeMirror returns a JSON object (not a 
+		// JSON string!) when we call toJSON.
 		// If state selection is undefined, we have a legacy editor. Just ignore that part.
 		const cm6editor = view.editor as EditorWithCM6;
 		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
-		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : "";
+		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : undefined;
 
 		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
 
@@ -358,7 +359,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		view.currentMode.applyScroll(stateData.scrollInfo.top);
 
 		// Restore last known selection, if any.
-		if (stateData.selection != "") {
+		if (stateData.selection !== undefined) {
 			const cm6editor = view.editor as EditorWithCM6;
 			var transaction = cm6editor.cm.state.update({
 				selection: EditorSelection.fromJSON(stateData.selection)})
@@ -444,7 +445,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		const _this = this;
 		tasks.addPromise(
 			_this.rememberAllOpenedFileStates()
-			.then(_this.writeStateDatabase(STATE_DB_PATH)));
+			.then(() => _this.writeStateDatabase(STATE_DB_PATH)));
 	}
 
 	private readonly rememberAllOpenedFileStates = async(): Promise<void> => {
