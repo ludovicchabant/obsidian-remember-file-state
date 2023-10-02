@@ -163,30 +163,12 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	onunload() {
-		// Run view uninstallers on all current views.
-		var numViews: number = 0;
-		this.app.workspace.getLeavesOfType("markdown").forEach(
-			(leaf: WorkspaceLeaf) => {
-				const filePath = (leaf.view as MarkdownView).file.path;
-				const viewId = this.getUniqueViewId(leaf.view as ViewWithID);
-				if (viewId != undefined) {
-					var uninstaller = this._viewUninstallers[viewId];
-					if (uninstaller) {
-						console.debug(`RememberFileState: uninstalling hooks for view ${viewId}`, filePath);
-						uninstaller(leaf.view);
-						++numViews;
-					} else {
-						console.debug("RememberFileState: found markdown view without an uninstaller!", filePath);
-					}
-					// Clear the ID so we don't get confused if the plugin
-					// is re-enabled later.
-					this.clearUniqueViewId(leaf.view as ViewWithID);
-				} else {
-					console.debug("RememberFileState: found markdown view without an ID!", filePath);
-				}
-			});
-		console.debug(`RememberFileState: unregistered ${numViews} view callbacks`);
-		this._viewUninstallers = {};
+		console.log("RememberFileState: unloading plugin");
+
+		// Unregister unload callbacks on all views.
+		this.unregisterAllViews();
+
+		// Forget which files are opened in which views.
 		this._lastOpenFiles = {};
 
 		// Run global unhooks.
@@ -261,6 +243,33 @@ export default class RememberFileStatePlugin extends Plugin {
 					"RememberFileState: plugin was unloaded, ignoring unregister");
 			}
 		});
+	}
+
+	private readonly unregisterAllViews = function() {
+		// Run view uninstallers on all current views.
+		var numViews: number = 0;
+		this.app.workspace.getLeavesOfType("markdown").forEach(
+			(leaf: WorkspaceLeaf) => {
+				const filePath = (leaf.view as MarkdownView).file.path;
+				const viewId = this.getUniqueViewId(leaf.view as ViewWithID);
+				if (viewId != undefined) {
+					var uninstaller = this._viewUninstallers[viewId];
+					if (uninstaller) {
+						console.debug(`RememberFileState: uninstalling hooks for view ${viewId}`, filePath);
+						uninstaller(leaf.view);
+						++numViews;
+					} else {
+						console.debug("RememberFileState: found markdown view without an uninstaller!", filePath);
+					}
+					// Clear the ID so we don't get confused if the plugin
+					// is re-enabled later.
+					this.clearUniqueViewId(leaf.view as ViewWithID);
+				} else {
+					console.debug("RememberFileState: found markdown view without an ID!", filePath);
+				}
+			});
+		console.debug(`RememberFileState: unregistered ${numViews} view callbacks`);
+		this._viewUninstallers = {};
 	}
 
 	private readonly onFileOpen = async (
