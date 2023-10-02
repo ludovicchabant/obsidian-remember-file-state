@@ -487,9 +487,15 @@ export default class RememberFileStatePlugin extends Plugin {
 		const fs = this.app.vault.adapter;
 		if (await fs.exists(path)) {
 			const jsonDb = await fs.read(path);
-			this.data = JSON.parse(jsonDb);
-			const numLoaded = Object.keys(this.data.rememberedFiles).length;
-			console.debug(`RememberFileState: read ${numLoaded} record from state database.`);
+			try
+			{
+				this.data = JSON.parse(jsonDb);
+				const numLoaded = Object.keys(this.data.rememberedFiles).length;
+				console.debug(`RememberFileState: read ${numLoaded} record from state database.`);
+			} catch (err) {
+				console.error("RememberFileState: error loading state database:", err);
+				console.error(jsonDb);
+			}
 		}
 	}
 
