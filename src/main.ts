@@ -461,14 +461,15 @@ export default class RememberFileStatePlugin extends Plugin {
 		delete this.data.rememberedFiles[file.path];
 	};
 
-	private readonly onAppQuit = async (tasks: Tasks): Promise<void> => {
-		const _this = this;
-		tasks.addPromise(
-			_this.rememberAllOpenedFileStates()
-			.then(() => _this.writeStateDatabase(STATE_DB_PATH)));
+	private readonly onAppQuit = function(tasks: Tasks) {
+		this.unregisterAllViews();
+		this.rememberAllOpenedFileStates();
+		this.writeStateDatabase(STATE_DB_PATH);
+		console.log("RememberFileState: done with app-quit cleanup.");
 	}
 
-	private readonly rememberAllOpenedFileStates = async(): Promise<void> => {
+	private readonly rememberAllOpenedFileStates = function() {
+		console.log("RememberFileState: remembering all opened file states...");
 		this.app.workspace.getLeavesOfType("markdown").forEach(
 			(leaf: WorkspaceLeaf) => { 
 				const view = leaf.view as MarkdownView;
@@ -477,13 +478,15 @@ export default class RememberFileStatePlugin extends Plugin {
 		);
 	}
 
-	private readonly writeStateDatabase = async(path: string): Promise<void> => {
+	private readonly writeStateDatabase = function(path: string) {
 		const fs = this.app.vault.adapter;
 		const jsonDb = JSON.stringify(this.data);
-		await fs.write(path, jsonDb);
+		console.log("RememberFileState: writing state database...");
+		fs.write(path, jsonDb)
+		.then(() => { console.log("RememberFileState: wrote state database."); });
 	}
 
-	private readonly readStateDatabase = async(path: string): Promise<void> => {
+	private readonly readStateDatabase = async function(path: string): Promise<void> {
 		const fs = this.app.vault.adapter;
 		if (await fs.exists(path)) {
 			const jsonDb = await fs.read(path);
