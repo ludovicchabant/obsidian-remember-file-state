@@ -1,3 +1,7 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
 import {
 	App,
 	Editor,
@@ -107,6 +111,13 @@ export default class RememberFileStatePlugin extends Plugin {
 	private _globalUninstallers: Function[] = [];
 
 	async onload() {
+		// Enable this for troubleshooting.
+		const enableLogfile: boolean = false;
+		if (enableLogfile) {
+			const outLogPath = path.join(os.tmpdir(), 'obsidian-remember-file-state.log');
+			this.setupLogFile(outLogPath);
+		}
+
 		console.log("RememberFileState: loading plugin");
 
 		await this.loadSettings();
@@ -471,6 +482,32 @@ export default class RememberFileStatePlugin extends Plugin {
 			const numLoaded = Object.keys(this.data.rememberedFiles).length;
 			console.debug(`RememberFileState: read ${numLoaded} record from state database.`);
 		}
+	}
+
+	private readonly setupLogFile = function(outLogPath: string) {
+		console.log("RememberFileState: setting up log file: ", outLogPath);
+
+		const makeWrapper = function(origFunc) {
+			return function (data) {
+				origFunc.apply(console, arguments);
+
+				var text: string = "";
+				for (var i: number = 0; i < arguments.length; i++) {
+					if (i > 0) text += " ";
+					text += arguments[i].toString();
+				}
+				text += "\n";
+				fs.appendFileSync(outLogPath, text);
+			};
+		};
+		console.log = makeWrapper(console.log);
+		console.debug = makeWrapper(console.debug);
+		console.info = makeWrapper(console.info);
+		console.warn = makeWrapper(console.warn);
+		console.error = makeWrapper(console.error);
+
+		const banner: string = "\n\nDebug log start\n===============\n";
+		fs.appendFileSync(outLogPath, banner);
 	}
 }
 
