@@ -126,10 +126,10 @@ export default class RememberFileStatePlugin extends Plugin {
 
 		await this.readStateDatabase(STATE_DB_PATH);
 
-		this.registerEvent(this.app.workspace.on('file-open', this.onFileOpen));
-		this.registerEvent(this.app.workspace.on('quit', this.onAppQuit));
-		this.registerEvent(this.app.vault.on('rename', this.onFileRename));
-		this.registerEvent(this.app.vault.on('delete', this.onFileDelete));
+		this.registerEvent(this.app.workspace.on('file-open', this.onFileOpen, this));
+		this.registerEvent(this.app.workspace.on('quit', this.onAppQuit, this));
+		this.registerEvent(this.app.vault.on('rename', this.onFileRename, this));
+		this.registerEvent(this.app.vault.on('delete', this.onFileDelete, this));
 
 		this.app.workspace.onLayoutReady(() => { this.onLayoutReady(); });
 
