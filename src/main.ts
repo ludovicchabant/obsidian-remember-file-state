@@ -505,8 +505,8 @@ export default class RememberFileStatePlugin extends Plugin {
 	private readonly setupLogFile = function(outLogPath: string) {
 		console.log("RememberFileState: setting up log file: ", outLogPath);
 
-		const makeWrapper = function(origFunc) {
-			return function (data) {
+		const makeWrapper = function(origFunc: () => void) {
+			return function () {
 				origFunc.apply(console, arguments);
 
 				var text: string = "";
