@@ -152,14 +152,6 @@ export default class RememberFileStatePlugin extends Plugin {
 		this._globalUninstallers.push(uninstall);
 
 		this.addSettingTab(new RememberFileStatePluginSettingTab(this.app, this));
-
-		if ((this.app.vault as any).getConfig('legacyEditor') !== false) {
-			new WarningModal(
-				this.app,
-				"Legacy Editor Not Supported",
-				"The 'Remember File State' plugin works only with the new editor. Please turn off 'Legacy Editor' in the options."
-			).open();
-		}
 	}
 
 	onunload() {
@@ -364,10 +356,9 @@ export default class RememberFileStatePlugin extends Plugin {
 
 		// Save current selection. CodeMirror returns a JSON object (not a 
 		// JSON string!) when we call toJSON.
-		// If state selection is undefined, we have a legacy editor. Just ignore that part.
 		const cm6editor = view.editor as EditorWithCM6;
 		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
-		const stateSelectionJSON = (stateSelection !== undefined) ? stateSelection.toJSON() : undefined;
+		const stateSelectionJSON = stateSelection.toJSON();
 
 		const stateData = {'scrollInfo': scrollInfo, 'selection': stateSelectionJSON};
 
