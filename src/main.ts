@@ -75,7 +75,7 @@ const DEFAULT_DATA: RememberFileStatePluginData = {
 };
 
 // Where to save the states database.
-const STATE_DB_PATH: string = '.obsidian/plugins/obsidian-remember-file-state/states.json';
+const STATE_DB_PATH: string = `${app.vault.configDir}/plugins/obsidian-remember-file-state/states.json`;
 
 // Simple warning message.
 class WarningModal extends Modal {
@@ -137,7 +137,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		var uninstall = around(this.app.workspace, {
 			openLinkText: function(next) {
 				return async function(
-					linktext: string, sourcePath: string, 
+					linktext: string, sourcePath: string,
 					newLeaf?: boolean, openViewState?: OpenViewState) {
 						// When opening a link, we don't want to restore the
 						// scroll position/selection/etc because there's a
@@ -177,12 +177,12 @@ export default class RememberFileStatePlugin extends Plugin {
 
 	private readonly onLayoutReady = function() {
 		this.app.workspace.getLeavesOfType("markdown").forEach(
-			(leaf: WorkspaceLeaf) => { 
+			(leaf: WorkspaceLeaf) => {
 				var view = leaf.view as MarkdownView;
 
 				// On startup, assign unique IDs to views and register the
 				// unload callback to remember their state.
-				this.registerOnUnloadFile(view); 
+				this.registerOnUnloadFile(view);
 
 				// Also remember which file is opened in which view.
 				const viewId = this.getUniqueViewId(view as unknown as ViewWithID);
@@ -354,7 +354,7 @@ export default class RememberFileStatePlugin extends Plugin {
 		// Save scrolling position (Obsidian API only gives vertical position).
 		const scrollInfo = {top: view.currentMode.getScroll(), left: 0};
 
-		// Save current selection. CodeMirror returns a JSON object (not a 
+		// Save current selection. CodeMirror returns a JSON object (not a
 		// JSON string!) when we call toJSON.
 		const cm6editor = view.editor as EditorWithCM6;
 		const stateSelection: EditorSelection = cm6editor.cm.state.selection;
@@ -374,17 +374,17 @@ export default class RememberFileStatePlugin extends Plugin {
 			const cm6editor = view.editor as EditorWithCM6;
 			var transaction = cm6editor.cm.state.update({
 				selection: EditorSelection.fromJSON(stateData.selection)})
-			
+
 			cm6editor.cm.dispatch(transaction);
 		}
 	}
-	
+
 	private readonly findFileStateFromOtherPane = function(file: TFile, activeView: MarkdownView) {
 		var otherView = null;
 		this.app.workspace.getLeavesOfType("markdown").every(
 			(leaf: WorkspaceLeaf) => {
 				var curView = leaf.view as MarkdownView;
-				if (curView != activeView && 
+				if (curView != activeView &&
 					curView.file.path == file.path &&
 					this.getUniqueViewId(curView) >= 0  // Skip views that have never been activated.
 				   ) {
@@ -462,7 +462,7 @@ export default class RememberFileStatePlugin extends Plugin {
 	private readonly rememberAllOpenedFileStates = function() {
 		console.log("RememberFileState: remembering all opened file states...");
 		this.app.workspace.getLeavesOfType("markdown").forEach(
-			(leaf: WorkspaceLeaf) => { 
+			(leaf: WorkspaceLeaf) => {
 				const view = leaf.view as MarkdownView;
 				this.rememberFileState(view);
 			}
@@ -519,4 +519,3 @@ export default class RememberFileStatePlugin extends Plugin {
 		fs.appendFileSync(outLogPath, banner);
 	}
 }
-
