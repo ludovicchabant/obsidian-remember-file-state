@@ -69,6 +69,13 @@ interface RememberFileStatePluginData {
 	rememberedFiles: Record<string, RememberedFileState>;
 }
 
+// Return the path of the file open in a view, if any.
+// Modern Obsidian can create empty tabs, detached leaves and
+// transitional views with no file, so this must never throw.
+function getViewFilePath(view: MarkdownView): string | undefined {
+	return view?.file?.path;
+}
+
 // Default empty list of remembered file states.
 const DEFAULT_DATA: RememberFileStatePluginData = {
 	rememberedFiles: {}
@@ -179,29 +186,49 @@ export default class RememberFileStatePlugin extends Plugin {
 		this.app.workspace.getLeavesOfType("markdown").forEach(
 			(leaf: WorkspaceLeaf) => { 
 				var view = leaf.view as MarkdownView;
+				if (!view) {
+					return;
+				}
 
 				// On startup, assign unique IDs to views and register the
 				// unload callback to remember their state.
 				this.registerOnUnloadFile(view); 
 
+				// File-less views (empty tabs, detached leaves, transitional
+				// states) have no state to remember or restore.
+				const filePath = getViewFilePath(view);
+				if (!filePath) {
+					return;
+				}
+
 				// Also remember which file is opened in which view.
 				const viewId = this.getUniqueViewId(view as unknown as ViewWithID);
 				if (viewId != undefined) {
-					this._lastOpenFiles[viewId] = view.file.path;
+					this._lastOpenFiles[viewId] = filePath;
 				}
 
 				// Restore state for each opened pane on startup.
-				const existingFile = this.data.rememberedFiles[view.file.path];
+				const existingFile = this.data.rememberedFiles[filePath];
 				if (existingFile) {
 					const savedStateData = existingFile.stateData;
-					console.debug("RememberFileState: restoring saved state for:", view.file.path, savedStateData);
-					this.restoreState(savedStateData, view);
+					console.debug("RememberFileState: restoring saved state for:", filePath, savedStateData);
+					try {
+						this.restoreState(savedStateData, view);
+					} catch (err) {
+						// One invalid saved state (for example a stale
+						// selection, see #2 and #28) must not stop the
+						// other panes from restoring.
+						console.debug("RememberFileState: couldn't restore file state on startup:", filePath, err);
+					}
 				}
 			});
 	}
 
 	private readonly registerOnUnloadFile = function(view: MarkdownView) {
-		var filePath = view.file.path;
+		if (!view) {
+			return;
+		}
+		var filePath = getViewFilePath(view);
 		var viewId = this.getUniqueViewId(view as unknown as ViewWithID, true);
 		if (viewId in this._viewUninstallers) {
 			return;
@@ -242,7 +269,12 @@ export default class RememberFileStatePlugin extends Plugin {
 		var numViews: number = 0;
 		this.app.workspace.getLeavesOfType("markdown").forEach(
 			(leaf: WorkspaceLeaf) => {
-				const filePath = (leaf.view as MarkdownView).file.path;
+				const view = leaf.view as MarkdownView;
+				if (!view) {
+					console.debug("RememberFileState: found markdown leaf without a view!");
+					return;
+				}
+				const filePath = getViewFilePath(view);
 				const viewId = this.getUniqueViewId(leaf.view as ViewWithID);
 				if (viewId != undefined) {
 					var uninstaller = this._viewUninstallers[viewId];
@@ -326,10 +358,22 @@ export default class RememberFileStatePlugin extends Plugin {
 	}
 
 	private readonly rememberFileState = async (view: MarkdownView, file?: TFile): Promise<void> => {
-		const stateData = this.getState(view);
-
+		if (!view) {
+			return;
+		}
 		if (file === undefined) {
 			file = view.file;
+		}
+		// File-less views have no state to remember.
+		if (!file) {
+			return;
+		}
+		let stateData;
+		try {
+			stateData = this.getState(view);
+		} catch (err) {
+			console.debug("RememberFileState: couldn't read state for:", file.path, err);
+			return;
 		}
 		var existingFile = this.data.rememberedFiles[file.path];
 		if (existingFile) {
@@ -365,17 +409,61 @@ export default class RememberFileStatePlugin extends Plugin {
 		return stateData;
 	}
 
+	// Clamp a saved selection to the current document so a stale selection
+	// (for example after editing outside Obsidian, see #2 and #28) does not
+	// throw "Selection points outside of document" on restore.
+	private readonly sanitizeSelection = function(selection: any, docLength: number) {
+		if (!selection || typeof selection !== "object") {
+			return null;
+		}
+		var ranges = Array.isArray(selection.ranges) ? selection.ranges : [];
+		if (ranges.length === 0) {
+			return { ranges: [{ anchor: 0, head: 0 }], main: 0 };
+		}
+		var clampedRanges = ranges.map((range: any) => {
+			var anchor = typeof range.anchor === "number" && !isNaN(range.anchor) ? range.anchor : 0;
+			var head = typeof range.head === "number" && !isNaN(range.head) ? range.head : 0;
+			if (anchor < 0) anchor = 0;
+			if (head < 0) head = 0;
+			if (anchor > docLength) anchor = docLength;
+			if (head > docLength) head = docLength;
+			return { anchor, head };
+		});
+		var main = selection.main;
+		if (typeof main !== "number" || isNaN(main) || main < 0 || main >= clampedRanges.length) {
+			main = 0;
+		}
+		return { ranges: clampedRanges, main };
+	}
+
 	private readonly restoreState = function(stateData: StateData, view: MarkdownView) {
+		if (!view || !view.currentMode || !stateData) {
+			return;
+		}
 		// Restore scrolling position (Obsidian API only allows setting vertical position).
-		view.currentMode.applyScroll(stateData.scrollInfo.top);
+		if (stateData.scrollInfo && typeof stateData.scrollInfo.top === "number") {
+			view.currentMode.applyScroll(stateData.scrollInfo.top);
+		}
 
 		// Restore last known selection, if any.
 		if (stateData.selection !== undefined) {
 			const cm6editor = view.editor as EditorWithCM6;
-			var transaction = cm6editor.cm.state.update({
-				selection: EditorSelection.fromJSON(stateData.selection)})
-			
-			cm6editor.cm.dispatch(transaction);
+			if (!cm6editor || !cm6editor.cm) {
+				return;
+			}
+			try {
+				const docLength = cm6editor.cm.state.doc.length;
+				const sanitizedSelection = this.sanitizeSelection(stateData.selection, docLength);
+				if (!sanitizedSelection) {
+					return;
+				}
+				var transaction = cm6editor.cm.state.update({
+					selection: EditorSelection.fromJSON(sanitizedSelection)})
+				
+				cm6editor.cm.dispatch(transaction);
+			} catch (err) {
+				console.debug("RememberFileState: invalid selection, skipping restore", err);
+			}
 		}
 	}
 	
@@ -384,8 +472,8 @@ export default class RememberFileStatePlugin extends Plugin {
 		this.app.workspace.getLeavesOfType("markdown").every(
 			(leaf: WorkspaceLeaf) => {
 				var curView = leaf.view as MarkdownView;
-				if (curView != activeView && 
-					curView.file.path == file.path &&
+				if (curView && curView != activeView && 
+					getViewFilePath(curView) == file.path &&
 					this.getUniqueViewId(curView) >= 0  // Skip views that have never been activated.
 				   ) {
 					otherView = curView;
@@ -395,7 +483,15 @@ export default class RememberFileStatePlugin extends Plugin {
 			},
 			this // thisArg
 		);
-		return otherView ? this.getState(otherView) : null;
+		if (!otherView) {
+			return null;
+		}
+		try {
+			return this.getState(otherView);
+		} catch (err) {
+			console.debug("RememberFileState: couldn't read state from other pane:", file.path, err);
+			return null;
+		}
 	}
 
 	private readonly forgetExcessFiles = function() {
@@ -438,6 +534,9 @@ export default class RememberFileStatePlugin extends Plugin {
 		file: TAbstractFile,
 		oldPath: string,
 	): Promise<void> => {
+		if (!file || !oldPath) {
+			return;
+		}
 		const existingFile: RememberedFileState = this.data.rememberedFiles[oldPath];
 		if (existingFile) {
 			existingFile.path = file.path;
@@ -449,6 +548,9 @@ export default class RememberFileStatePlugin extends Plugin {
 	private readonly onFileDelete = async (
 		file: TAbstractFile,
 	): Promise<void> => {
+		if (!file) {
+			return;
+		}
 		delete this.data.rememberedFiles[file.path];
 	};
 
@@ -464,6 +566,9 @@ export default class RememberFileStatePlugin extends Plugin {
 		this.app.workspace.getLeavesOfType("markdown").forEach(
 			(leaf: WorkspaceLeaf) => { 
 				const view = leaf.view as MarkdownView;
+				if (!view || !getViewFilePath(view)) {
+					return;
+				}
 				this.rememberFileState(view);
 			}
 		);
